@@ -1,38 +1,51 @@
 package buffer
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 type Buffer struct {
 	chunks []chunk
 	limit  time.Duration
 }
 
-func NewBuffer(limit time.Duration) Buffer {
-	return Buffer{
+func NewBuffer(limit time.Duration) *Buffer {
+	return &Buffer{
 		chunks: make([]chunk, 0),
 		limit:  limit,
 	}
 }
 
-func (b *Buffer) Push(data []byte) {
+func (b *Buffer) Put(data []byte, ts time.Time) {
 	b.chunks = append(b.chunks, chunk{
 		data:      data,
-		timestamp: time.Now(),
+		timestamp: ts,
 	})
+}
+
+func (b *Buffer) Push(data []byte) {
+	b.Put(data, time.Now())
 }
 
 func (b *Buffer) Trim() {
 	trimStart := -1
 
+	lbound := time.Now().Add(-b.limit)
+
 	for i, chunk := range b.chunks {
-		if chunk.timestamp.Before(time.Now().Add(-b.limit)) {
+		if chunk.timestamp.Before(lbound) {
 			trimStart = i
 		}
 	}
 
 	if trimStart >= 0 {
-		b.chunks = b.chunks[trimStart:]
+		b.chunks = b.chunks[trimStart+1:]
 	}
+}
+
+func (b *Buffer) Clear() {
+	b.chunks = make([]chunk, 0)
 }
 
 func (b Buffer) Count() int {
@@ -60,7 +73,7 @@ func (b Buffer) Duration() (dur time.Duration) {
 }
 
 func (b Buffer) Usage() float64 {
-	return 100 * float64(b.Duration()) / float64(b.limit)
+	return math.Min(100, 100*float64(b.Duration())/float64(b.limit))
 }
 
 // Search chunks before and after ts
