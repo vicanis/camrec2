@@ -2,6 +2,7 @@ package mail
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"google.golang.org/api/gmail/v1"
@@ -55,14 +56,15 @@ func (m *Mail) GetHicloudMessages() ([]Message, error) {
 			continue
 		}
 
-		timestamp := BuildTimestamp(str)
-		if timestamp == nil {
+		ts, err := BuildTimestamp(str)
+		if err != nil {
+			log.Printf("timestamp parse failed: %s", err)
 			continue
 		}
 
 		list = append(list, Message{
 			Id:        msg.Id,
-			Timestamp: *timestamp,
+			Timestamp: *ts,
 		})
 	}
 

@@ -1,7 +1,6 @@
 package mail
 
 import (
-	"log"
 	"regexp"
 	"time"
 )
@@ -20,12 +19,13 @@ func ParseTimestamp(text string) string {
 	return str
 }
 
-func BuildTimestamp(text string) *time.Time {
+func BuildTimestamp(text string) (ts *time.Time, err error) {
 	t, err := time.ParseInLocation(time.DateTime, text, time.Local)
 	if err != nil {
-		log.Printf("parse failed: %s", err)
-		return nil
+		return
 	}
 
-	return &t
+	ts = &t
+
+	return
 }

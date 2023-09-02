@@ -17,9 +17,14 @@ func TestParseNormal(t *testing.T) {
 }
 
 func TestBuildEmpty(t *testing.T) {
-	require.Nil(t, mail.BuildTimestamp(""))
+	ts, err := mail.BuildTimestamp("")
+	require.Error(t, err)
+	require.Nil(t, ts)
 }
 
 func TestBuildNormal(t *testing.T) {
-	require.Equal(t, time.Date(2023, 8, 30, 22, 41, 06, 0, time.Local), *(mail.BuildTimestamp("2023-08-30 22:41:06")))
+	ts, err := mail.BuildTimestamp("2023-08-30 22:41:06")
+
+	require.NoError(t, err)
+	require.Equal(t, time.Date(2023, 8, 30, 22, 41, 06, 0, time.Local), *ts)
 }
