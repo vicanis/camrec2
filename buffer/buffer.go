@@ -92,10 +92,6 @@ func (b Buffer) Search(ts time.Time) []byte {
 	// search for   03:30
 	for i, chunk := range b.chunks {
 		if chunk.timestamp.After(ts) {
-			if i == 0 {
-				return nil
-			}
-
 			found := make([]byte, 0)
 
 			found = append(found, b.chunks[i-1].data...)

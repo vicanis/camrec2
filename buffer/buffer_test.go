@@ -115,4 +115,49 @@ func TestSearch(t *testing.T) {
 		b := buffer.NewBuffer(0)
 		require.Nil(t, b.Search(time.Now()))
 	})
+
+	t.Run("lower bound", func(t *testing.T) {
+		b := buffer.NewBuffer(time.Second)
+
+		now := time.Now()
+		b.Put(nil, now.Add(-time.Second))
+
+		require.Nil(t, b.Search(now.Add(-2*time.Second)))
+	})
+
+	t.Run("upper bound ", func(t *testing.T) {
+		b := buffer.NewBuffer(time.Second)
+
+		now := time.Now()
+		b.Put(nil, now.Add(-time.Second))
+
+		require.Nil(t, b.Search(now))
+
+		b.Put(nil, now)
+
+		require.Nil(t, b.Search(now))
+	})
+
+	t.Run("within range", func(t *testing.T) {
+		b := buffer.NewBuffer(time.Minute)
+
+		now := time.Now()
+		b.Put(nil, now.Add(-30*time.Second))
+		b.Put(nil, now.Add(-15*time.Second))
+
+		require.NotNil(t, b.Search(now.Add(-20*time.Second)))
+	})
+
+	t.Run("only 2 chunks within range", func(t *testing.T) {
+		b := buffer.NewBuffer(time.Minute)
+
+		now := time.Now()
+		b.Put([]byte{1}, now.Add(-time.Minute))
+		b.Put([]byte{2}, now.Add(-45*time.Second))
+		b.Put([]byte{3}, now.Add(-30*time.Second))
+		b.Put([]byte{4}, now.Add(-15*time.Second))
+		b.Put([]byte{5}, now)
+
+		require.ElementsMatch(t, []byte{2, 3}, b.Search(now.Add(-40*time.Second)))
+	})
 }

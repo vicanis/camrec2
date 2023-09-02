@@ -13,7 +13,7 @@ type chunk struct {
 func (c chunk) String() string {
 	return fmt.Sprintf(
 		"%s: %d bytes",
-		c.timestamp.Format("02.01.2006 15:04:05"),
+		c.timestamp.Format(time.RFC1123),
 		len(c.data),
 	)
 }
