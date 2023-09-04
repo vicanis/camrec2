@@ -30,51 +30,34 @@ func main() {
 	sigchan := make(chan os.Signal, 1)
 	signal.Notify(sigchan, os.Interrupt)
 
-	tschan := make(chan time.Time)
+	m, err := mail.Initialize()
+	if err != nil {
+		log.Printf("mail initialize failed: %s", err)
+		cancel()
+		return
+	}
+
+	tschan := m.StartMessageChecker(ctx, 5*time.Second)
 
 	go func() {
-		err := stream.Start(ctx, tschan)
-		if err != nil {
-			log.Printf("streaming failed: %s", err)
-			cancel()
-		}
-	}()
+		p := stream.NewStreamingProcess(ctx, 120*time.Second)
 
-	go func() {
-		m, err := mail.Initialize()
-		if err != nil {
-			log.Printf("mail initialize failed: %s", err)
+		if err := p.StartProcess(); err != nil {
+			log.Printf("streaming start failed: %s", err)
 			cancel()
 			return
 		}
 
-		log.Printf("start mail loop")
-
-		ticker := time.Tick(5 * time.Second)
-
-	outer:
 		for {
 			select {
 			case <-ctx.Done():
-				break outer
-			case <-ticker:
-				// pass
-			}
-
-			messages, err := m.GetHicloudMessages()
-			if err != nil {
-				log.Printf("get message failed: %s", err)
-				continue
-			}
-
-			for _, msg := range messages {
-				tschan <- msg.Timestamp
+				return
+			case ts := <-tschan:
+				log.Printf("handle timestamp: %s", ts.Format(time.RFC1123))
+				err := p.HandleTimestamp(ts)
+				log.Printf("> %s", err)
 			}
 		}
-
-		close(tschan)
-
-		log.Printf("end mail loop")
 	}()
 
 	log.Printf("press ctrl+c to interrupt")

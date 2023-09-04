@@ -3,16 +3,42 @@ package stream
 import (
 	"camrec/buffer"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
-func Start(ctx context.Context, tschan chan time.Time) error {
+type StreamingProcess struct {
+	ctx    context.Context
+	cmd    *exec.Cmd
+	stdout io.ReadCloser
+	buf    *buffer.Buffer
+	lock   sync.Mutex
+	Done   chan<- struct{}
+}
+
+func NewStreamingProcess(ctx context.Context, bufferSize time.Duration) *StreamingProcess {
+	return &StreamingProcess{
+		ctx:  ctx,
+		buf:  buffer.NewBuffer(bufferSize),
+		lock: sync.Mutex{},
+		Done: make(chan<- struct{}, 1),
+	}
+}
+
+func (p *StreamingProcess) StartProcess() (err error) {
 	url := os.Getenv("STREAM")
+
+	if url == "" {
+		err = errors.New("no stream URL")
+		return
+	}
 
 	cmdArgs := []string{
 		"ffmpeg",
@@ -29,125 +55,116 @@ func Start(ctx context.Context, tschan chan time.Time) error {
 
 	log.Printf("start process: %s", strings.Join(cmdArgs, " "))
 
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	p.cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
 
-	streamReader, err := cmd.StdoutPipe()
+	stdout, err := p.cmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
 
-	defer streamReader.Close()
+	p.stdout = stdout
 
 	log.Printf("start streaming from %s", url)
 
-	if err := cmd.Start(); err != nil {
-		return err
+	if err = p.cmd.Start(); err != nil {
+		return
 	}
 
-	defer func() {
-		if cmd.Process != nil {
-			cmd.Process.Release()
-		}
-	}()
-
-	log.Printf("started process PID %d, warming up", cmd.Process.Pid)
+	log.Printf("started process PID %d, warming up", p.cmd.Process.Pid)
 
 	// wait a little till ffmpeg starts write to the stdout
 	time.Sleep(100 * time.Millisecond)
 
-	if err := checkProcessState(cmd); err != nil {
-		return err
+	if err = p.checkProcessState(); err != nil {
+		return
 	}
 
-	buffer := buffer.NewBuffer(120 * time.Second)
+	go p.startStatisticsLoop(30 * time.Second)
+	go p.startStreamingLoop()
 
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+	return
+}
 
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				log.Printf(
-					"records: %d, size %d, duration %f sec (usage %.2f%%)",
-					buffer.Count(), buffer.Size(),
-					buffer.Duration().Seconds(), buffer.Usage(),
-				)
-			}
+func (p *StreamingProcess) checkProcessState() error {
+	state := p.cmd.ProcessState
+
+	if state == nil {
+		return nil
+	}
+
+	if state.Exited() {
+		return fmt.Errorf("process exited with code %d", state.ExitCode())
+	}
+
+	return nil
+}
+
+func (p *StreamingProcess) startStatisticsLoop(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-ticker.C:
+			log.Printf(
+				"records: %d, size %d, duration %f sec (usage %.2f%%)",
+				p.buf.Count(), p.buf.Size(),
+				p.buf.Duration().Seconds(), p.buf.Usage(),
+			)
 		}
+	}
+}
+
+func (p *StreamingProcess) startStreamingLoop() {
+	defer func() {
+		p.Done <- struct{}{}
 	}()
 
-loop:
 	for {
-		if err := checkProcessState(cmd); err != nil {
-			return err
+		if err := p.checkProcessState(); err != nil {
+			log.Print(err)
+			break
 		}
 
-		buf := make([]byte, 1024*1024)
+		chunk := make([]byte, 1024*1024)
 
-		n, err := streamReader.Read(buf)
+		n, err := p.stdout.Read(chunk)
 		if n == 0 {
 			continue
 		}
 
 		if err != nil {
-			return err
+			log.Print(err)
+			break
 		}
 
 		select {
-		case <-ctx.Done():
-			cmd.Process.Signal(os.Interrupt)
-			break loop
-
-		case ts := <-tschan:
-			log.Printf("streamer: process timestamp %s", ts.Format("15:04:05 02-01-2006"))
-
-			event := buffer.Search(ts)
-
-			if event != nil {
-				fname := "events/" + ts.Format("15:04:05 02-01-2006")
-
-				f, err := os.OpenFile(fname, os.O_CREATE, 0644)
-				if err != nil {
-					log.Printf("event file create failed: %s", err)
-					break
-				}
-
-				n, err := f.Write(event)
-				if err != nil {
-					log.Printf("event file write failed: %s", err)
-					break
-				}
-
-				log.Printf("event file was created: %s (%d bytes)", fname, n)
-			} else {
-				log.Printf("no event data")
-			}
+		case <-p.ctx.Done():
+			p.cmd.Process.Signal(os.Interrupt)
+			break
 
 		default:
-			// pass
 		}
 
-		buffer.Trim()
-		buffer.Push(buf[:n])
+		p.lock.Lock()
+		p.buf.Trim()
+		p.buf.Push(chunk[:n])
+		p.lock.Unlock()
 	}
-
-	log.Printf("streaming end: %s", ctx.Err())
-
-	return nil
 }
 
-func checkProcessState(cmd *exec.Cmd) error {
-	p := cmd.ProcessState
+func (p *StreamingProcess) HandleTimestamp(ts time.Time) (err error) {
+	p.lock.Lock()
+	event := p.buf.Search(ts)
+	p.lock.Unlock()
 
-	if p == nil {
-		return nil
+	if event != nil {
+		if err = event.SaveFile(); err != nil {
+			err = fmt.Errorf("event file save failed: %w", err)
+			return
+		}
 	}
 
-	if p.Exited() {
-		return fmt.Errorf("process exited with code %d", p.ExitCode())
-	}
-
-	return nil
+	return
 }

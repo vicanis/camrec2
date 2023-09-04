@@ -1,19 +1,20 @@
 package buffer
 
 import (
+	"camrec/event"
 	"math"
 	"time"
 )
 
 type Buffer struct {
-	chunks []chunk
-	limit  time.Duration
+	chunks   []chunk
+	duration time.Duration
 }
 
-func NewBuffer(limit time.Duration) *Buffer {
+func NewBuffer(duration time.Duration) *Buffer {
 	return &Buffer{
-		chunks: make([]chunk, 0),
-		limit:  limit,
+		chunks:   make([]chunk, 0),
+		duration: duration,
 	}
 }
 
@@ -31,7 +32,7 @@ func (b *Buffer) Push(data []byte) {
 func (b *Buffer) Trim() {
 	trimStart := -1
 
-	lbound := time.Now().Add(-b.limit)
+	lbound := time.Now().Add(-b.duration)
 
 	for i, chunk := range b.chunks {
 		if chunk.timestamp.Before(lbound) {
@@ -73,11 +74,11 @@ func (b Buffer) Duration() (dur time.Duration) {
 }
 
 func (b Buffer) Usage() float64 {
-	return math.Min(100, 100*float64(b.Duration())/float64(b.limit))
+	return math.Min(100, 100*float64(b.Duration())/float64(b.duration))
 }
 
 // Search chunks before and after ts
-func (b Buffer) Search(ts time.Time) []byte {
+func (b Buffer) Search(ts time.Time) *event.Event {
 	if len(b.chunks) == 0 {
 		return nil
 	}
@@ -97,7 +98,7 @@ func (b Buffer) Search(ts time.Time) []byte {
 			found = append(found, b.chunks[i-1].data...)
 			found = append(found, chunk.data...)
 
-			return found
+			return event.NewEvent(ts, found)
 		}
 	}
 

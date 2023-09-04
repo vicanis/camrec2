@@ -1,6 +1,7 @@
 package mail
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -29,70 +30,80 @@ func Initialize() (m *Mail, err error) {
 	return
 }
 
-func (m *Mail) GetHicloudMessages() ([]Message, error) {
-	messages, err := m.getMessages()
-	if err != nil {
-		return nil, err
-	}
+func (m *Mail) StartMessageChecker(ctx context.Context, checkInterval time.Duration) chan time.Time {
+	mch := make(chan time.Time)
 
-	list := make([]Message, 0)
+	go func() {
+		ticker := time.NewTicker(checkInterval)
 
-	for _, msg := range messages {
-		isHicloud := false
+		defer ticker.Stop()
+		defer close(mch)
 
-		for _, v := range msg.Payload.Headers {
-			if v.Name == "From" && v.Value == "no_reply@hicloudcam.com" {
-				isHicloud = true
-				break
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := m.update(mch); err != nil {
+					log.Print(err)
+					return
+				}
 			}
 		}
+	}()
 
-		if !isHicloud {
-			continue
-		}
-
-		str := ParseTimestamp(msg.Snippet)
-		if str == "" {
-			continue
-		}
-
-		ts, err := BuildTimestamp(str)
-		if err != nil {
-			log.Printf("timestamp parse failed: %s", err)
-			continue
-		}
-
-		list = append(list, Message{
-			Id:        msg.Id,
-			Timestamp: *ts,
-		})
-	}
-
-	return list, nil
+	return mch
 }
 
-func (m *Mail) getMessages() ([]*gmail.Message, error) {
-	r, err := m.service.Users.Messages.List("me").Do()
+func (m *Mail) update(mch chan time.Time) (err error) {
+	messages, err := m.getUnreadMessages()
 	if err != nil {
-		return nil, fmt.Errorf("unable to fetch messages: %s", err)
+		return
+	}
+
+	for _, msg := range messages {
+		tsString := ParseTimestamp(msg.Snippet)
+		if tsString == "" {
+			continue
+		}
+
+		ts, err := BuildTimestamp(tsString)
+		if err != nil {
+			continue
+		}
+
+		mch <- *ts
+	}
+
+	return
+}
+
+func (m *Mail) getUnreadMessages() ([]*gmail.Message, error) {
+	respList, err := m.service.Users.Messages.List("me").Do()
+	if err != nil {
+		return nil, fmt.Errorf("unable to fetch messages: %w", err)
 	}
 
 	messages := make([]*gmail.Message, 0)
 
-	for _, msg := range r.Messages {
+	for _, msg := range respList.Messages {
 		if m.lastMessageId == msg.Id {
 			break
 		}
 
-		r2, err := m.service.Users.Messages.Get("me", msg.Id).Do()
+		respMsg, err := m.service.Users.Messages.Get("me", msg.Id).Do()
 		if err != nil {
 			return nil, err
-		} else {
-			messages = append(messages, r2)
 		}
+
+		if !isHicloudMessage(respMsg) {
+			continue
+		}
+
+		messages = append(messages, respMsg)
 	}
 
-	for _, msg := range r.Messages {
+	for _, msg := range respList.Messages {
 		if m.lastMessageId == msg.Id {
 			break
 		}
@@ -104,4 +115,18 @@ func (m *Mail) getMessages() ([]*gmail.Message, error) {
 	}
 
 	return messages, nil
+}
+
+func isHicloudMessage(msg *gmail.Message) bool {
+	if msg.Payload == nil || msg.Payload.Headers == nil {
+		return false
+	}
+
+	for _, v := range msg.Payload.Headers {
+		if v.Name == "From" && v.Value == "no_reply@hicloudcam.com" {
+			return true
+		}
+	}
+
+	return false
 }
