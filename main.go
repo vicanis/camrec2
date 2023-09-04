@@ -54,8 +54,13 @@ func main() {
 				return
 			case ts := <-tschan:
 				log.Printf("handle timestamp: %s", ts.Format(time.RFC1123))
-				err := p.HandleTimestamp(ts)
-				log.Printf("> %s", err)
+				if err := p.HandleTimestamp(ts); err != nil {
+					log.Printf("> failed: %s", err)
+				}
+			case err := <-p.Done:
+				log.Printf("streaming end: %s", err)
+				cancel()
+				return
 			}
 		}
 	}()
@@ -65,7 +70,8 @@ func main() {
 loop:
 	for {
 		select {
-		case <-sigchan:
+		case sig := <-sigchan:
+			log.Printf("signal: %s", sig)
 			cancel()
 			break loop
 		case <-ctx.Done():

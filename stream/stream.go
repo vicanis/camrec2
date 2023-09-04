@@ -20,7 +20,7 @@ type StreamingProcess struct {
 	stdout io.ReadCloser
 	buf    *buffer.Buffer
 	lock   sync.Mutex
-	Done   chan<- struct{}
+	Done   chan error
 }
 
 func NewStreamingProcess(ctx context.Context, bufferSize time.Duration) *StreamingProcess {
@@ -28,7 +28,7 @@ func NewStreamingProcess(ctx context.Context, bufferSize time.Duration) *Streami
 		ctx:  ctx,
 		buf:  buffer.NewBuffer(bufferSize),
 		lock: sync.Mutex{},
-		Done: make(chan<- struct{}, 1),
+		Done: make(chan error, 1),
 	}
 }
 
@@ -108,7 +108,7 @@ func (p *StreamingProcess) startStatisticsLoop(interval time.Duration) {
 			return
 		case <-ticker.C:
 			log.Printf(
-				"records: %d, size %d, duration %f sec (usage %.2f%%)",
+				"chunk count %d, size %d, duration %f sec (usage %.2f%%)",
 				p.buf.Count(), p.buf.Size(),
 				p.buf.Duration().Seconds(), p.buf.Usage(),
 			)
@@ -117,14 +117,10 @@ func (p *StreamingProcess) startStatisticsLoop(interval time.Duration) {
 }
 
 func (p *StreamingProcess) startStreamingLoop() {
-	defer func() {
-		p.Done <- struct{}{}
-	}()
-
 	for {
 		if err := p.checkProcessState(); err != nil {
-			log.Print(err)
-			break
+			p.Done <- err
+			return
 		}
 
 		chunk := make([]byte, 1024*1024)
@@ -135,14 +131,15 @@ func (p *StreamingProcess) startStreamingLoop() {
 		}
 
 		if err != nil {
-			log.Print(err)
-			break
+			p.Done <- err
+			return
 		}
 
 		select {
 		case <-p.ctx.Done():
 			p.cmd.Process.Signal(os.Interrupt)
-			break
+			p.Done <- p.ctx.Err()
+			return
 
 		default:
 		}
