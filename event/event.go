@@ -56,7 +56,7 @@ func (e Event) FileName() string {
 }
 
 func (e Event) SaveFile() (err error) {
-	if e.data == nil {
+	if e.data == nil || len(e.data) == 0 {
 		return errors.New("empty event data")
 	}
 
@@ -83,4 +83,8 @@ func (e Event) SaveFile() (err error) {
 	}
 
 	return nil
+}
+
+func (e Event) Data() []byte {
+	return e.data
 }

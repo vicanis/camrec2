@@ -7,12 +7,14 @@ import (
 )
 
 type Buffer struct {
+	data     []byte
 	chunks   []chunk
 	duration time.Duration
 }
 
 func NewBuffer(duration time.Duration) *Buffer {
 	return &Buffer{
+		data:     make([]byte, 0, 1024*1024), // 1Mb initial buffer
 		chunks:   make([]chunk, 0),
 		duration: duration,
 	}
@@ -20,9 +22,12 @@ func NewBuffer(duration time.Duration) *Buffer {
 
 func (b *Buffer) Put(data []byte, ts time.Time) {
 	b.chunks = append(b.chunks, chunk{
-		data:      data,
+		offset:    len(b.data),
+		length:    len(data),
 		timestamp: ts,
 	})
+
+	b.data = append(b.data, data...)
 }
 
 func (b *Buffer) Push(data []byte) {
@@ -34,14 +39,28 @@ func (b *Buffer) Trim() {
 
 	lbound := time.Now().Add(-b.duration)
 
+	offsetShift := 0
+
 	for i, chunk := range b.chunks {
 		if chunk.timestamp.Before(lbound) {
 			trimStart = i
+			offsetShift += chunk.length
 		}
 	}
 
 	if trimStart >= 0 {
-		b.chunks = b.chunks[trimStart+1:]
+		for i := range b.chunks {
+			if i > trimStart {
+				b.chunks[i].offset -= offsetShift
+			}
+		}
+
+		trimmedChunks := make([]chunk, len(b.chunks)-1)
+		copy(trimmedChunks, b.chunks[trimStart+1:])
+		b.chunks = trimmedChunks
+
+		// shift data buffer
+		copy(b.data, b.data[offsetShift:])
 	}
 }
 
@@ -55,7 +74,7 @@ func (b Buffer) Count() int {
 
 func (b Buffer) Size() (size int) {
 	for _, chunk := range b.chunks {
-		size += len(chunk.data)
+		size += chunk.length
 	}
 
 	return
@@ -93,10 +112,12 @@ func (b Buffer) Search(ts time.Time) *event.Event {
 	// search for   03:30
 	for i, chunk := range b.chunks {
 		if chunk.timestamp.After(ts) {
-			found := make([]byte, 0)
+			prev := b.chunks[i-1]
 
-			found = append(found, b.chunks[i-1].data...)
-			found = append(found, chunk.data...)
+			chunkPart := b.data[prev.offset : prev.offset+prev.length+chunk.length]
+
+			found := make([]byte, len(chunkPart))
+			copy(found, chunkPart)
 
 			return event.NewEvent(ts, found)
 		}

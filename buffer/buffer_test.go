@@ -158,6 +158,9 @@ func TestSearch(t *testing.T) {
 		b.Put([]byte{4}, now.Add(-15*time.Second))
 		b.Put([]byte{5}, now)
 
-		require.ElementsMatch(t, []byte{2, 3}, b.Search(now.Add(-40*time.Second)))
+		event := b.Search(now.Add(-40 * time.Second))
+
+		require.NotNil(t, event)
+		require.ElementsMatch(t, []byte{2, 3}, event.Data())
 	})
 }

@@ -23,8 +23,8 @@ func TestFormatChunk(t *testing.T) {
 		require.NoError(t, err)
 
 		c := chunk{
-			data:      []byte{1, 2, 3, 4},
 			timestamp: ts,
+			length:    4,
 		}
 
 		require.Equal(t, "Sat, 10 Mar 2012 14:05:22 +04: 4 bytes", c.String())
