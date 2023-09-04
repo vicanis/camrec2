@@ -52,7 +52,7 @@ func (e Event) FileName() string {
 		index++
 	}
 
-	return base
+	return base + ".mp4"
 }
 
 func (e Event) SaveFile() (err error) {
