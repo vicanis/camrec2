@@ -114,7 +114,7 @@ func (b Buffer) Search(ts time.Time) *event.Event {
 		if chunk.timestamp.After(ts) {
 			prev := b.chunks[i-1]
 
-			chunkPart := b.data[prev.offset : prev.offset+prev.length+chunk.length]
+			chunkPart := b.data[prev.offset:len(b.data)]
 
 			found := make([]byte, len(chunkPart))
 			copy(found, chunkPart)
