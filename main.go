@@ -52,11 +52,18 @@ func main() {
 			select {
 			case <-ctx.Done():
 				return
+
 			case ts := <-tschan:
-				log.Printf("handle timestamp: %s", ts.Format(time.RFC1123))
-				if err := p.HandleTimestamp(ts); err != nil {
-					log.Printf("> failed: %s", err)
-				}
+				go func(ts time.Time) {
+					time.Sleep(20 * time.Second)
+
+					log.Printf("handle timestamp: %s", ts.Format(time.RFC1123))
+
+					if err := p.HandleTimestamp(ts); err != nil {
+						log.Printf("> failed: %s", err)
+					}
+				}(ts)
+
 			case err := <-p.Done:
 				log.Printf("streaming end: %s", err)
 				cancel()
