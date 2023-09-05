@@ -14,7 +14,7 @@ type Buffer struct {
 
 func NewBuffer(duration time.Duration) *Buffer {
 	return &Buffer{
-		data:     make([]byte, 0, 1024*1024), // 1Mb initial buffer
+		data:     make([]byte, 0),
 		chunks:   make([]chunk, 0),
 		duration: duration,
 	}
