@@ -103,21 +103,38 @@ func (b Buffer) Search(ts time.Time) *event.Event {
 		return nil
 	}
 
-	// b.chunks stores chunks in ascending order
-	// (m:s)    03:00   04:00   05:00
-	// search for   03:30
+	lboundTime := ts.Add(-30 * time.Second)
+	uboundTime := ts.Add(30 * time.Second)
+
+	lboundIndex := 0
+	uboundIndex := len(b.chunks) - 1
+
 	for i, chunk := range b.chunks {
-		if chunk.timestamp.After(ts) {
-			prev := b.chunks[i-1]
-
-			chunkPart := b.data[prev.offset:len(b.data)]
-
-			found := make([]byte, len(chunkPart))
-			copy(found, chunkPart)
-
-			return event.NewEvent(ts, found)
+		if chunk.timestamp.After(lboundTime) {
+			lboundIndex = i
+			break
 		}
 	}
 
-	return nil
+	for j := len(b.chunks) - 1; j > lboundIndex; j-- {
+		if b.chunks[j].timestamp.Before(uboundTime) {
+			uboundIndex = j
+			break
+		}
+	}
+
+	offsetStart := b.chunks[lboundIndex].offset
+
+	offsetEnd := offsetStart
+	for i := lboundIndex; i <= uboundIndex; i++ {
+		offsetEnd += b.chunks[i].length
+	}
+
+	chunkPart := b.data[offsetStart:offsetEnd]
+
+	found := make([]byte, len(chunkPart))
+	copy(found, chunkPart)
+
+	return event.NewEvent(ts, found)
+
 }
