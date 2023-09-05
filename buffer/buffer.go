@@ -55,12 +55,8 @@ func (b *Buffer) Trim() {
 			}
 		}
 
-		trimmedChunks := make([]chunk, 0)
-		trimmedChunks = append(trimmedChunks, b.chunks[trimStart+1:]...)
-		b.chunks = trimmedChunks
-
-		// shift data buffer
-		copy(b.data, b.data[offsetShift:])
+		b.chunks = b.chunks[trimStart+1:]
+		b.data = b.data[offsetShift:]
 	}
 }
 
