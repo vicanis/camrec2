@@ -36,7 +36,7 @@ func (e Event) FileName() string {
 	index := 0
 	for {
 		if index == 0 {
-			if !isExist(base) {
+			if !isExist(base + ".mp4") {
 				break
 			}
 
@@ -45,8 +45,8 @@ func (e Event) FileName() string {
 
 		check := fmt.Sprintf("%s-%d", base, index)
 
-		if !isExist(check) {
-			return check
+		if !isExist(check + ".mp4") {
+			return check + ".mp4"
 		}
 
 		index++
