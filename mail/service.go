@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -17,30 +18,24 @@ import (
 func GetService() (srv *gmail.Service, err error) {
 	ctx := context.Background()
 
-	log.Printf("loading credentials file")
 	b, err := os.ReadFile("credentials.json")
 	if err != nil {
-		return nil, fmt.Errorf("unable to read client secret file: %w", err)
+		return nil, fmt.Errorf("unable to read client secret: %w", err)
 	}
 
-	log.Printf("create config")
 	// If modifying these scopes, delete your previously saved token.json.
 	config, err := google.ConfigFromJSON(b, gmail.GmailReadonlyScope)
 	if err != nil {
-		return nil, fmt.Errorf("unable to parse client secret file to config: %w", err)
+		return nil, fmt.Errorf("unable to parse client secret: %w", err)
 	}
 
 	config.RedirectURL = "http://localhost:8000"
 
-	log.Printf("config created: redirect URL %s", config.RedirectURL)
-
-	log.Printf("create client")
 	client := getClient(config)
 
-	log.Printf("create service")
 	srv, err = gmail.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve Gmail client: %w", err)
+		return nil, fmt.Errorf("unable to create Gmail client: %w", err)
 	}
 
 	return srv, nil
@@ -53,14 +48,10 @@ func getClient(config *oauth2.Config) *http.Client {
 	// time.
 	tokFile := "token.json"
 
-	log.Printf("read token from file")
 	tok, err := tokenFromFile(tokFile)
 
-	if err != nil {
-		log.Printf("> not found, get token from web")
+	if err != nil || tok.Expiry.Before(time.Now()) {
 		tok = getTokenFromWeb(config)
-
-		log.Printf(">> fetched")
 		saveToken(tokFile, tok)
 	}
 
@@ -82,6 +73,7 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	if err != nil {
 		log.Fatalf("unable to retrieve token from web: %v", err)
 	}
+
 	return tok
 }
 
