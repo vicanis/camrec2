@@ -53,7 +53,7 @@ func (p *FfmpegStreamer) Start() (err error) {
 		"-",
 	}
 
-	log.Printf("start process: %s", strings.Join(cmdArgs, " "))
+	log.Printf("start streamer process: %s", strings.Join(cmdArgs, " "))
 
 	p.cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
 
@@ -64,13 +64,11 @@ func (p *FfmpegStreamer) Start() (err error) {
 
 	p.stdout = stdout
 
-	log.Printf("start streaming from %s", url)
-
 	if err = p.cmd.Start(); err != nil {
 		return
 	}
 
-	log.Printf("started process PID %d, warming up", p.cmd.Process.Pid)
+	log.Printf("streamer process was started: PID %d", p.cmd.Process.Pid)
 
 	// wait a little till ffmpeg starts write to the stdout
 	time.Sleep(100 * time.Millisecond)
