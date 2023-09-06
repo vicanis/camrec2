@@ -126,16 +126,16 @@ func TestSearch(t *testing.T) {
 	})
 
 	t.Run("upper bound ", func(t *testing.T) {
-		b := buffer.NewBuffer(time.Second)
+		b := buffer.NewBuffer(time.Minute)
 
 		now := time.Now()
-		b.Put(nil, now.Add(-time.Second))
+		b.Put(nil, now.Add(-time.Minute))
 
 		require.Nil(t, b.Search(now))
 
 		b.Put(nil, now)
 
-		require.Nil(t, b.Search(now))
+		require.NotNil(t, b.Search(now))
 	})
 
 	t.Run("within range", func(t *testing.T) {
@@ -152,6 +152,7 @@ func TestSearch(t *testing.T) {
 		b := buffer.NewBuffer(time.Minute)
 
 		now := time.Now()
+		b.Put([]byte{9}, now.Add(-90*time.Second))
 		b.Put([]byte{1}, now.Add(-time.Minute))
 		b.Put([]byte{2}, now.Add(-45*time.Second))
 		b.Put([]byte{3}, now.Add(-30*time.Second))
@@ -161,6 +162,6 @@ func TestSearch(t *testing.T) {
 		event := b.Search(now.Add(-40 * time.Second))
 
 		require.NotNil(t, event)
-		require.ElementsMatch(t, []byte{2, 3}, event.Data())
+		require.ElementsMatch(t, []byte{1, 2, 3, 4}, event.Data())
 	})
 }
