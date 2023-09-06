@@ -3,6 +3,7 @@ package mail
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"google.golang.org/api/gmail/v1"
@@ -25,6 +26,8 @@ func Initialize() (m *Mail, err error) {
 		return
 	}
 
+	log.Printf("Gmail service was initialized")
+
 	m = &Mail{
 		service: srv,
 		Done:    make(chan error, 1),
@@ -41,6 +44,8 @@ func (m *Mail) StartMessageChecker(ctx context.Context, checkInterval time.Durat
 
 		defer ticker.Stop()
 		defer close(mch)
+
+		log.Printf("start mail loop")
 
 		for {
 			select {
