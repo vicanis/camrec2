@@ -14,6 +14,11 @@ func TestCreate(t *testing.T) {
 	require.NotNil(t, e)
 }
 
+func TestData(t *testing.T) {
+	e := event.NewEvent(time.Now(), []byte{1, 2, 3})
+	require.EqualValues(t, []byte{1, 2, 3}, e.Data())
+}
+
 func TestSaveFile(t *testing.T) {
 	now := time.Now()
 
