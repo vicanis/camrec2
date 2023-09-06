@@ -77,19 +77,17 @@ func main() {
 		}
 	}()
 
+	time.Sleep(time.Second)
+
 	log.Printf("press ctrl+c to interrupt")
 
-loop:
-	for {
-		select {
-		case sig := <-sigchan:
-			log.Printf("signal: %s", sig)
-			cancel()
-			break loop
-		case <-ctx.Done():
-			break loop
-		}
-	}
+	go func() {
+		sig := <-sigchan
+		log.Printf("signal: %s", sig)
+		cancel()
+	}()
+
+	<-ctx.Done()
 
 	time.Sleep(time.Second)
 }
