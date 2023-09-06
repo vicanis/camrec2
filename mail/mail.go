@@ -3,7 +3,6 @@ package mail
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"google.golang.org/api/gmail/v1"
@@ -12,6 +11,7 @@ import (
 type Mail struct {
 	service       *gmail.Service
 	lastMessageId string
+	Done          chan error
 }
 
 type Message struct {
@@ -25,7 +25,10 @@ func Initialize() (m *Mail, err error) {
 		return
 	}
 
-	m = &Mail{service: srv}
+	m = &Mail{
+		service: srv,
+		Done:    make(chan error, 1),
+	}
 
 	return
 }
@@ -45,7 +48,7 @@ func (m *Mail) StartMessageChecker(ctx context.Context, checkInterval time.Durat
 				return
 			case <-ticker.C:
 				if err := m.update(mch); err != nil {
-					log.Print(err)
+					m.Done <- err
 					return
 				}
 			}

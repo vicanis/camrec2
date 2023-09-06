@@ -40,9 +40,9 @@ func main() {
 	tschan := m.StartMessageChecker(ctx, 5*time.Second)
 
 	go func() {
-		p := stream.NewStreamingProcess(ctx, 120*time.Second)
+		p := stream.NewFfmpegStreamer(ctx, 120*time.Second)
 
-		if err := p.StartProcess(); err != nil {
+		if err := p.Start(); err != nil {
 			log.Printf("streaming start failed: %s", err)
 			cancel()
 			return
@@ -64,8 +64,13 @@ func main() {
 					}
 				}(ts)
 
-			case err := <-p.Done:
+			case err := <-p.Done():
 				log.Printf("streaming end: %s", err)
+				cancel()
+				return
+
+			case err := <-m.Done:
+				log.Printf("message loop end: %s", err)
 				cancel()
 				return
 			}
